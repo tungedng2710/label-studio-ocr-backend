@@ -14,7 +14,7 @@ from label_studio_ml.utils import DATA_UNDEFINED_NAME
 logger = logging.getLogger(__name__)
 
 
-class NewModel(LabelStudioMLBase):
+class SuryaOCR(LabelStudioMLBase):
     """Surya OCR + detection integration for Label Studio
 
     Expects an OCR labeling config similar to Label Studio's OCR template:
@@ -195,7 +195,7 @@ class NewModel(LabelStudioMLBase):
                         "value": {
                             "points": points,
                             # Some OCR templates include labels, but it's optional here
-                            "labels": ["text"] if from_name_text == "transcription" else [],
+                            "labels": ["text"],
                             "text": [line.text],
                         },
                         "id": region_id,

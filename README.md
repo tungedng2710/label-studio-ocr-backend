@@ -1,3 +1,7 @@
+Surya OCR backend for Label Studio. This backend integrates the Surya OCR engine for text detection and recognition.
+
+- Surya OCR repository: https://github.com/VikParuchuri/surya
+
 This guide describes the simplest way to start using ML backend with Label Studio.
 
 ## Running with Docker (Recommended)
