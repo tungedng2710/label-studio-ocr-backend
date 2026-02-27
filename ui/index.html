@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Surya OCR Demo</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 0 1.5rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+
+    header .brand {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    header .brand svg { width: 26px; height: 26px; flex-shrink: 0; }
+
+    #btn-settings {
+      background: transparent;
+      border: 1.5px solid rgba(255,255,255,.45);
+      color: #fff;
+      padding: .35rem .85rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .85rem;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      transition: background .15s, border-color .15s;
+    }
+    #btn-settings:hover { background: rgba(255,255,255,.12); border-color: #fff; }
+    #btn-settings svg { width: 15px; height: 15px; }
+
+    /* ── Main two-panel layout ────────────────────────────────── */
+    main {
+      flex: 1 1 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      padding: 1rem;
+      min-height: 0;          /* crucial: let grid cells shrink */
+      overflow: hidden;
+    }
+
+    .panel {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: .65rem 1rem;
+      border-bottom: 1px solid #e8e8e8;
+      font-weight: 600;
+      font-size: .9rem;
+      color: #333;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* ── Upload panel ─────────────────────────────────────────── */
+    #drop-zone {
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 2px dashed #ccc;
+      border-radius: 6px;
+      margin: .75rem;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    #drop-zone.dragging {
+      border-color: #4f46e5;
+      background: #f5f3ff;
+    }
+
+    #drop-zone img#preview-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;   /* never distort / overflow */
+      display: none;
+    }
+
+    #drop-zone .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .5rem;
+      color: #888;
+      font-size: .9rem;
+      pointer-events: none;
+    }
+
+    #drop-zone .placeholder svg { width: 40px; height: 40px; opacity: .5; }
+
+    #file-input { display: none; }
+
+    .upload-actions {
+      padding: .6rem .75rem;
+      border-top: 1px solid #e8e8e8;
+      display: flex;
+      gap: .5rem;
+      flex-shrink: 0;
+    }
+
+    /* ── Output panel ─────────────────────────────────────────── */
+    #output-area {
+      flex: 1 1 0;
+      overflow-y: auto;
+      padding: .75rem;
+      font-size: .83rem;
+      line-height: 1.6;
+      min-height: 0;
+    }
+
+    #output-area .empty-state {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #aaa;
+      gap: .5rem;
+    }
+
+    #output-area .empty-state svg { width: 36px; height: 36px; opacity: .4; }
+
+    .line-item {
+      background: #f7f8fa;
+      border-left: 3px solid #4f46e5;
+      border-radius: 4px;
+      padding: .45rem .65rem;
+      margin-bottom: .45rem;
+    }
+
+    .line-item .text { font-weight: 500; }
+
+    .line-item .conf {
+      font-size: .76rem;
+      color: #888;
+      margin-top: .15rem;
+    }
+
+    .conf-bar {
+      display: inline-block;
+      height: 5px;
+      background: #4f46e5;
+      border-radius: 3px;
+      vertical-align: middle;
+      margin-right: .3rem;
+    }
+
+    /* ── Shared buttons ───────────────────────────────────────── */
+    .btn {
+      padding: .4rem 1rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .85rem;
+      font-weight: 500;
+      transition: opacity .15s;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: #4f46e5; color: #fff; }
+    .btn-primary:not(:disabled):hover { background: #4338ca; }
+    .btn-secondary { background: #e5e7eb; color: #374151; }
+    .btn-secondary:not(:disabled):hover { background: #d1d5db; }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-danger:not(:disabled):hover { background: #dc2626; }
+
+    #btn-run { flex: 1; }
+
+    /* status badge next to "OCR Output" title */
+    #status-badge {
+      font-size: .75rem;
+      font-weight: 500;
+      padding: .15rem .55rem;
+      border-radius: 20px;
+      background: #e5e7eb;
+      color: #666;
+    }
+    #status-badge.running { background: #fef3c7; color: #92400e; }
+    #status-badge.done    { background: #d1fae5; color: #065f46; }
+    #status-badge.error   { background: #fee2e2; color: #991b1b; }
+
+    /* loading spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2.5px solid rgba(79,70,229,.25);
+      border-top-color: #4f46e5;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+
+    /* ── Modal backdrop ───────────────────────────────────────── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s;
+    }
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    /* ── Modal dialog ─────────────────────────────────────────── */
+    .modal {
+      background: #fff;
+      border-radius: 12px;
+      width: 480px;
+      max-width: calc(100vw - 2rem);
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+      transform: translateY(-16px) scale(.97);
+      transition: transform .2s, opacity .2s;
+      overflow: hidden;
+    }
+    .modal-backdrop.open .modal {
+      transform: translateY(0) scale(1);
+    }
+
+    .modal-title-bar {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #e8e8e8;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-title-bar h2 { font-size: 1rem; font-weight: 700; }
+
+    #btn-close-modal {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: .2rem;
+      border-radius: 4px;
+      color: #666;
+      display: flex;
+      align-items: center;
+    }
+    #btn-close-modal:hover { background: #f3f4f6; color: #111; }
+    #btn-close-modal svg { width: 18px; height: 18px; }
+
+    .modal-body {
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: .9rem;
+      max-height: calc(100vh - 200px);
+      overflow-y: auto;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+    }
+    .form-group label {
+      font-size: .82rem;
+      font-weight: 600;
+      color: #374151;
+    }
+    .form-group small {
+      font-size: .76rem;
+      color: #6b7280;
+      margin-top: -.2rem;
+    }
+    .form-group input[type="text"],
+    .form-group input[type="password"],
+    .form-group input[type="number"],
+    .form-group input[type="range"] {
+      border: 1.5px solid #d1d5db;
+      border-radius: 6px;
+      padding: .45rem .7rem;
+      font-size: .87rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .form-group input:focus { border-color: #4f46e5; }
+
+    .form-group input[type="range"] {
+      padding: 0;
+      cursor: pointer;
+      accent-color: #4f46e5;
+    }
+
+    .range-row {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+    }
+    .range-row input[type="range"] { flex: 1; }
+    .range-value {
+      min-width: 2.5rem;
+      text-align: right;
+      font-size: .85rem;
+      font-weight: 600;
+      color: #4f46e5;
+    }
+
+    .form-group .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    /* simple toggle switch */
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: #d1d5db;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .toggle-slider::after {
+      content: "";
+      position: absolute;
+      width: 14px; height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      top: 3px; left: 3px;
+      transition: transform .2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: #4f46e5; }
+    .toggle-switch input:checked + .toggle-slider::after { transform: translateX(16px); }
+
+    .modal-footer {
+      padding: .85rem 1.25rem;
+      border-top: 1px solid #e8e8e8;
+      display: flex;
+      justify-content: flex-end;
+      gap: .5rem;
+    }
+
+    /* ── Divider in modal ─────────────────────────────────────── */
+    .section-label {
+      font-size: .72rem;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      padding-bottom: .3rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════ HEADER ═══════════════════════════════ -->
+<header>
+  <div class="brand">
+    <!-- text icon -->
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <rect x="3" y="3" width="18" height="18" rx="3"/>
+      <path d="M7 8h10M7 12h10M7 16h6"/>
+    </svg>
+    Surya OCR Demo
+  </div>
+
+  <button id="btn-settings" title="Advanced settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.07 4.93A10 10 0 0 0 4.93 19.07M19.07 19.07A10 10 0 0 0 4.93 4.93"/>
+    </svg>
+    Advanced Settings
+  </button>
+</header>
+
+<!-- ═══════════════════ MAIN PANELS ══════════════════════════ -->
+<main>
+
+  <!-- ── Left panel: image upload ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>Input Image</span>
+      <span id="filename-label" style="font-size:.78rem;color:#888;font-weight:400;"></span>
+    </div>
+
+    <div id="drop-zone" title="Click or drag an image here">
+      <input type="file" id="file-input" accept="image/*" />
+      <img id="preview-img" alt="Preview" />
+      <div class="placeholder" id="drop-placeholder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="21 15 16 10 5 21"/>
+        </svg>
+        <span>Click or drag &amp; drop an image</span>
+        <small style="color:#bbb;font-size:.78rem;">PNG, JPG, WEBP</small>
+      </div>
+    </div>
+
+    <div class="upload-actions">
+      <button class="btn btn-secondary" id="btn-clear" disabled>Clear</button>
+      <button class="btn btn-primary" id="btn-run" disabled>▶ Run OCR</button>
+    </div>
+  </div>
+
+  <!-- ── Right panel: OCR output ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>OCR Output</span>
+      <div style="display:flex;align-items:center;gap:.5rem;">
+        <div class="spinner" id="spinner"></div>
+        <span id="status-badge">Idle</span>
+      </div>
+    </div>
+
+    <div id="output-area">
+      <div class="empty-state" id="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <span>OCR results will appear here</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══════════════════ ADVANCED SETTINGS MODAL ══════════════ -->
+<div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-heading">
+  <div class="modal">
+    <div class="modal-title-bar">
+      <h2 id="modal-heading">⚙ Advanced Settings</h2>
+      <button id="btn-close-modal" aria-label="Close settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+
+      <div class="section-label">Backend Connection</div>
+
+      <div class="form-group">
+        <label for="s-api-url">API Endpoint</label>
+        <input type="text" id="s-api-url" placeholder="http://localhost:9090" />
+        <small>URL of the running Surya OCR ML backend.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="s-api-user">Basic Auth User</label>
+        <input type="text" id="s-api-user" placeholder="(leave blank if not set)" autocomplete="off" />
+      </div>
+
+      <div class="form-group">
+        <label for="s-api-pass">Basic Auth Password</label>
+        <input type="password" id="s-api-pass" placeholder="(leave blank if not set)" autocomplete="new-password" />
+      </div>
+
+      <div class="section-label" style="margin-top:.3rem;">OCR Options</div>
+
+      <div class="form-group">
+        <label>Confidence Threshold</label>
+        <div class="range-row">
+          <input type="range" id="s-conf-threshold" min="0" max="1" step="0.01" value="0.0" />
+          <span class="range-value" id="s-conf-value">0.00</span>
+        </div>
+        <small>Lines with confidence below this value will be hidden from results.</small>
+      </div>
+
+      <div class="form-group">
+        <label>Math Mode</label>
+        <div class="toggle-row">
+          <label class="toggle-switch">
+            <input type="checkbox" id="s-math-mode" checked />
+            <span class="toggle-slider"></span>
+          </label>
+          <span style="font-size:.85rem;color:#374151;">Enable LaTeX / math recognition</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="s-label-config">Labeling Config (XML)</label>
+        <input type="text" id="s-label-config" placeholder="<View>…</View>" />
+        <small>Optional: the Label Studio labeling config to send with the task.</small>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="btn-cancel-settings">Cancel</button>
+      <button class="btn btn-primary" id="btn-save-settings">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ SCRIPT ════════════════════════════════ -->
+<script>
+  // ── Persistent settings ──────────────────────────────────────
+  const STORAGE_KEY = "surya_ocr_settings";
+
+  const defaults = {
+    apiUrl:       "http://localhost:9090",
+    apiUser:      "",
+    apiPass:      "",
+    confThreshold: 0.0,
+    mathMode:     true,
+    labelConfig:  "",
+  };
+
+  function loadSettings() {
+    try {
+      return Object.assign({}, defaults, JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
+    } catch { return { ...defaults }; }
+  }
+
+  function saveSettings(cfg) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+  }
+
+  let cfg = loadSettings();
+
+  // ── DOM refs ─────────────────────────────────────────────────
+  const dropZone      = document.getElementById("drop-zone");
+  const fileInput     = document.getElementById("file-input");
+  const previewImg    = document.getElementById("preview-img");
+  const dropPlaceholder = document.getElementById("drop-placeholder");
+  const fileNameLabel = document.getElementById("filename-label");
+  const btnClear      = document.getElementById("btn-clear");
+  const btnRun        = document.getElementById("btn-run");
+  const outputArea    = document.getElementById("output-area");
+  const emptyState    = document.getElementById("empty-state");
+  const spinner       = document.getElementById("spinner");
+  const statusBadge   = document.getElementById("status-badge");
+
+  // modal
+  const backdrop          = document.getElementById("modal-backdrop");
+  const btnSettings       = document.getElementById("btn-settings");
+  const btnCloseModal     = document.getElementById("btn-close-modal");
+  const btnCancelSettings = document.getElementById("btn-cancel-settings");
+  const btnSaveSettings   = document.getElementById("btn-save-settings");
+
+  // form fields
+  const fApiUrl     = document.getElementById("s-api-url");
+  const fApiUser    = document.getElementById("s-api-user");
+  const fApiPass    = document.getElementById("s-api-pass");
+  const fConf       = document.getElementById("s-conf-threshold");
+  const fConfVal    = document.getElementById("s-conf-value");
+  const fMathMode   = document.getElementById("s-math-mode");
+  const fLabel      = document.getElementById("s-label-config");
+
+  // ── State ────────────────────────────────────────────────────
+  let currentFile = null;
+
+  // ── Populate modal with current cfg ─────────────────────────
+  function populateModal() {
+    fApiUrl.value   = cfg.apiUrl;
+    fApiUser.value  = cfg.apiUser;
+    fApiPass.value  = cfg.apiPass;
+    fConf.value     = cfg.confThreshold;
+    fConfVal.textContent = Number(cfg.confThreshold).toFixed(2);
+    fMathMode.checked = cfg.mathMode;
+    fLabel.value    = cfg.labelConfig;
+  }
+
+  // ── Modal open / close ───────────────────────────────────────
+  function openModal() {
+    populateModal();
+    backdrop.classList.add("open");
+    fApiUrl.focus();
+  }
+
+  function closeModal() {
+    backdrop.classList.remove("open");
+  }
+
+  btnSettings.addEventListener("click", openModal);
+  btnCloseModal.addEventListener("click", closeModal);
+  btnCancelSettings.addEventListener("click", closeModal);
+
+  // close on backdrop click (outside dialog)
+  backdrop.addEventListener("click", e => { if (e.target === backdrop) closeModal(); });
+
+  // close on Escape
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+
+  // live range label
+  fConf.addEventListener("input", () => {
+    fConfVal.textContent = Number(fConf.value).toFixed(2);
+  });
+
+  // save
+  btnSaveSettings.addEventListener("click", () => {
+    cfg.apiUrl        = fApiUrl.value.trim() || defaults.apiUrl;
+    cfg.apiUser       = fApiUser.value.trim();
+    cfg.apiPass       = fApiPass.value;
+    cfg.confThreshold = parseFloat(fConf.value);
+    cfg.mathMode      = fMathMode.checked;
+    cfg.labelConfig   = fLabel.value.trim();
+    saveSettings(cfg);
+    closeModal();
+  });
+
+  // ── File handling ────────────────────────────────────────────
+  function loadFile(file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    currentFile = file;
+    const url = URL.createObjectURL(file);
+    previewImg.src = url;
+    previewImg.style.display = "block";
+    dropPlaceholder.style.display = "none";
+    fileNameLabel.textContent = file.name;
+    btnClear.disabled = false;
+    btnRun.disabled   = false;
+    clearOutput();
+  }
+
+  dropZone.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) loadFile(fileInput.files[0]);
+  });
+
+  dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragging"); });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragging"));
+  dropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropZone.classList.remove("dragging");
+    const f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+
+  btnClear.addEventListener("click", () => {
+    currentFile = null;
+    previewImg.style.display = "none";
+    previewImg.src = "";
+    dropPlaceholder.style.display = "flex";
+    fileNameLabel.textContent = "";
+    fileInput.value = "";
+    btnClear.disabled = true;
+    btnRun.disabled   = true;
+    clearOutput();
+  });
+
+  // ── Output helpers ───────────────────────────────────────────
+  function clearOutput() {
+    outputArea.innerHTML = "";
+    outputArea.appendChild(emptyState);
+    emptyState.style.display = "flex";
+    setStatus("idle");
+  }
+
+  function setStatus(state, text) {
+    spinner.style.display = state === "running" ? "block" : "none";
+    statusBadge.className = "";
+    statusBadge.classList.add(state === "running" ? "running" : state === "done" ? "done" : state === "error" ? "error" : "");
+    statusBadge.textContent = text || (state === "running" ? "Running…" : state === "done" ? "Done" : state === "error" ? "Error" : "Idle");
+  }
+
+  function renderLines(lines) {
+    emptyState.style.display = "none";
+    if (!lines.length) {
+      outputArea.innerHTML = "";
+      outputArea.appendChild(emptyState);
+      emptyState.style.display = "flex";
+      emptyState.querySelector("span").textContent = "No text detected.";
+      return;
+    }
+    outputArea.innerHTML = "";
+    lines.forEach(line => {
+      const div = document.createElement("div");
+      div.className = "line-item";
+      const confPct = Math.round(line.conf * 100);
+      div.innerHTML = `
+        <div class="text">${escHtml(line.text)}</div>
+        <div class="conf">
+          <span class="conf-bar" style="width:${confPct}px;max-width:120px"></span>
+          Confidence: ${confPct}%
+        </div>`;
+      outputArea.appendChild(div);
+    });
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  // ── Run OCR ──────────────────────────────────────────────────
+  btnRun.addEventListener("click", runOCR);
+
+  async function runOCR() {
+    if (!currentFile) return;
+
+    btnRun.disabled = true;
+    setStatus("running");
+
+    try {
+      // Convert to base64 data-URL for the task payload
+      const dataUrl = await fileToDataUrl(currentFile);
+
+      const payload = {
+        tasks: [{
+          data: { image: dataUrl },
+        }],
+      };
+
+      if (cfg.labelConfig) {
+        payload.label_config = cfg.labelConfig;
+      }
+
+      const headers = { "Content-Type": "application/json" };
+      if (cfg.apiUser) {
+        if (!cfg.apiUrl.startsWith("https://")) {
+          console.warn("Basic Auth credentials are being sent over a non-HTTPS connection.");
+        }
+        headers["Authorization"] = "Basic " + btoa(`${cfg.apiUser}:${cfg.apiPass}`);
+      }
+
+      const apiUrl = cfg.apiUrl.replace(/\/$/, "");
+      const res = await fetch(`${apiUrl}/predict`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server responded with ${res.status} ${res.statusText}`);
+      }
+
+      const json = await res.json();
+      const results = json.results?.[0]?.result ?? [];
+
+      // Extract textarea results (OCR lines)
+      const lines = results
+        .filter(r => r.type === "textarea" && Array.isArray(r.value?.text))
+        .map(r => ({
+          text: r.value.text.join(" "),
+          conf: r.score ?? 0,
+        }))
+        .filter(l => l.conf >= cfg.confThreshold);
+
+      renderLines(lines);
+      setStatus("done", `Done · ${lines.length} line${lines.length !== 1 ? "s" : ""}`);
+    } catch (err) {
+      console.error(err);
+      outputArea.innerHTML = `<div style="color:#dc2626;padding:.75rem;font-size:.85rem;">
+        <strong>Error:</strong> ${escHtml(err.message)}
+      </div>`;
+      setStatus("error");
+    } finally {
+      btnRun.disabled = false;
+    }
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+</script>
+</body>
+</html>
